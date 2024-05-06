@@ -18,3 +18,9 @@ def get_year_list(tablename,cursor):
     data = execute_select(query,cursor)
     year_list = [row[0]for row in data.fetchall()]
     return year_list
+
+def get_quarter_list(tablename,cursor,year):
+    query = f'select distinct(quarter) from {tablename} where year = {year}' 
+    data = execute_select(query,cursor)
+    year_list = [f'Q{row[0]}'for row in data.fetchall()]
+    return year_list
