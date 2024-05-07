@@ -863,7 +863,6 @@ def user(cursor):
                 district = st.radio('Select district:', options = [None] + [row for row in df['District'].unique()],horizontal= True,index = 0)
             district = f'{district} district'
 
-            st.write(district[:4])
         if state:
             filters.append(f"state = '{state}'")
             labels.append(f' in :blue[{state}]')
