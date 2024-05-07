@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 from streamlit_option_menu import option_menu
 import plotly.express as px
+import mysql.connector as sql
 
 #Local modules
 import scripts.constants as c
@@ -17,7 +18,6 @@ def set_page_config():
         layout="wide",
     )
 
-
 # Setting page header
 def set_page_header():
     st.markdown(
@@ -28,7 +28,6 @@ def set_page_header():
         f'<center><span style="color:purple;font-size:24px">{c.page_header[1]}</span></center>',
         unsafe_allow_html=True,
     )
-
 
 # Option nav menu
 def set_option_menu():
@@ -43,21 +42,21 @@ def set_option_menu():
         styles={
             "container": {
                 "padding": "0!important",
-                "background-color": "purple",
+                "background-color": "#391c59",
                 "width": "100%",
             },
-            "icon": {"color": "#000080", "font-size": "20px"},
+            "icon": {"color": "yellow", "font-size": "20px"},
             "nav-link": {
+                'font-face':'bold',
                 "font-size": "20px",
                 "text-align": "center",
                 "margin": "0px",
-                "--hover-color": "#800020",
+                "--hover-color": "magenta",
             },
-            "nav-link-selected": {"background-color": "green"},
+            "nav-link-selected": {"background-color": "#c25857"},
         },
     )
     return selected
-
 
 # -------------------------------------Home option--------------------------------
 def home(cursor):
@@ -67,7 +66,7 @@ def home(cursor):
         
         #Select type
         type_options = ["Transactions", "Users","Insurance"]
-        data_type = st.selectbox("Choose Type:[Transactions,User]", type_options)
+        data_type = st.selectbox("Choose Type:[Transactions,User,Insurance]", type_options)
 
     with col2:
         # Getting year list from a table
@@ -109,16 +108,16 @@ def home(cursor):
             insurance_data(cursor,year,quarter)#Sow insurance data
 
 # Plot the map
-def create_map_plot(df, color,quarter,year):
+def create_map_plot(df, color,hover_data,scale,hovertemplate):
     show_legend = st.checkbox("Show_legend")
 
     fig = px.choropleth_mapbox(
         df,
-        geojson=c.geojson_url,
+        geojson= c.geojson_url,
         featureidkey="properties.ST_NM",
         locations="state",
         color=color,
-        color_continuous_scale="sunsetdark",
+        color_continuous_scale= scale,
         hover_name="state",
         mapbox_style='carto-positron',
         center={"lat": 24, "lon": 79},
@@ -126,7 +125,7 @@ def create_map_plot(df, color,quarter,year):
         zoom=3.6,
         width=800, 
         height=800,
-        # hover_data=[color],
+        hover_data=hover_data,
     )
 
     fig.update_geos(fitbounds="locations", visible=True)
@@ -134,43 +133,84 @@ def create_map_plot(df, color,quarter,year):
     if not show_legend:
         fig.update_coloraxes(showscale=False)
 
-    fig.update_layout(coloraxis_colorbar=dict(showticklabels=False),
-                    hoverlabel_font={'size': 18},
-                    mapbox_layers = [])
-
+    fig.update_layout(coloraxis_colorbar=dict(showticklabels=True),
+                    hoverlabel_font={'size': 15,'family': 'comic sans ms'},
+                    hoverlabel={
+                        'bgcolor':'#2c1942',
+                        'bordercolor':'red',
+                        # 'xanchor':'center',
+                        # 'yanchor':'bottom'
+                        
+                    }
+                    )
+    fig.update_traces(hovertemplate = hovertemplate)
+    
     st.plotly_chart(fig, use_container_width=True)
 
 # Function for map visualize transactions
 def transaction_map(cursor, year, quarter):
-    query = f"select state, sum(Transaction_amount) as Total_amount from map_transaction where year = {year} and quarter = {quarter} group by state order by state"
+    query = f"select state,sum(Transaction_amount) as Total_amount,sum(Transaction_count) as Total_count from map_transaction where year = {year} and quarter = {quarter} group by state order by state"
 
     data = sql.execute_select(query, cursor)
     df = pd.DataFrame(data.fetchall(), columns=data.column_names)
 
     df["state"] = c.geojson_state_df
 
-    create_map_plot(df, "Total_amount",quarter,year)
+    df['average'] = df['Total_amount'] / df['Total_count']
+    df['average'] = '₹' + df['average'].apply(e.simplify_number)
+    
+    df['count'] = df['Total_count'].apply(e.simplify_number)
+    
+    df['Total_amount'] = '₹' + df['Total_amount'].apply(e.simplify_number, args=[True])
+    
+    hover_data = ['state','count','Total_amount','average']
+    scale = 'burgyl'
+
+    hovertemplate='%{hovertext}<br><br>All transactions<br>%{customdata[1]}<br><br>Total payment value<br>%{customdata[2]}<br><br>Avg. payment value<br>%{customdata[3]}'
+
+    
+    create_map_plot(df, "Total_count",hover_data,scale,hovertemplate)
 
 # Function for map visualize transactions
 def user_map(cursor, year, quarter):
-    query = f"select state, sum(Registered_User) as Total_users from map_user where year = {year} and quarter = {quarter} group by state order by state"
-
-    data = sql.execute_select(query, cursor)
-    df = pd.DataFrame(data.fetchall(), columns=data.column_names)
-
-    df["state"] = c.geojson_state_df
-
-    create_map_plot(df, "Total_users",quarter,year)
-
-def insurance_map(cursor, year,quarter):
-    query = f"select state, sum(Policy_amount) as Total_amount from map_insurance where year = {year} and quarter = {quarter} group by state order by state"
+    query = f"select state, sum(Registered_User) as Total_users,sum(app_opens) as app from map_user where year = {year} and quarter = {quarter} group by state order by state"
 
     data = sql.execute_select(query, cursor)
     df = pd.DataFrame(data.fetchall(), columns=data.column_names)
 
     df["state"] = c.geojson_state_df
     
-    create_map_plot(df, "Total_amount",quarter,year)
+    df['count'] = df['Total_users'].apply(e.simplify_number)
+    
+    df['app'] = df['app'].apply(e.simplify_number)
+    
+    hover_data = ['state','count','app']
+    hovertemplate='%{hovertext}<br><br>Registered Users<br>%{customdata[1]}<br><br>App Opens<br>%{customdata[2]}'
+    scale = 'blues'
+    
+    create_map_plot(df, "Total_users",hover_data,scale,hovertemplate)
+
+#Function to show insurance data
+def insurance_map(cursor, year,quarter):
+    query = f"select state, sum(Policy_amount) as Total_amount,sum(Policy_count) as Total_count from map_insurance where year = {year} and quarter = {quarter} group by state order by state"
+
+    data = sql.execute_select(query, cursor)
+    df = pd.DataFrame(data.fetchall(), columns=data.column_names)
+
+    df["state"] = c.geojson_state_df
+    
+    df['average'] = df['Total_amount'] / df['Total_count']
+    df['average'] = '₹' + df['average'].apply(e.simplify_number)
+    
+    df['count'] = df['Total_count'].apply(e.simplify_number)
+    
+    df['Total_amount'] = '₹' + df['Total_amount'].apply(e.simplify_number, args=[True])
+    
+    hover_data = ['state','count','Total_amount','average']
+    hovertemplate='%{hovertext}<br><br>Insurance Policies(Nos.)<br>%{customdata[1]}<br><br>Total premium value<br>%{customdata[2]}<br><br>Avg. premium value<br>%{customdata[3]}'
+    scale = 'greens'
+    
+    create_map_plot(df, "Total_count",hover_data,scale,hovertemplate)
 
 #Function to show transaction data
 def transaction_data(cursor,year,quarter):
@@ -265,13 +305,13 @@ def transaction_data(cursor,year,quarter):
             
             for i,row in state_df.iterrows():
                 show_state_data(i+1,
-                                row['pincode'],
+                                int(row['pincode']),
                                 e.simplify_number(row['total_transaction'],True,True)
                                 )
             
 #Function to show user data
 def user_data(cursor,year,quarter):
-    with st.container(height = 490,border=True):
+    with st.container(height = 750,border=True):
         
         #Total transaction data
         query = f"select year, quarter,sum(Registered_User) as Total_users,sum(App_opens) as app from map_user where year = {year} and quarter = {quarter} group by year,quarter"
@@ -341,10 +381,11 @@ def user_data(cursor,year,quarter):
             
             for i,row in state_df.iterrows():
                 show_state_data(i+1,
-                                row['district'].replace(' district','').title(),
+                                int(row['pincode']),
                                 e.simplify_number(row['total_user'],True,True)
                                 )
 
+#Function to show insurance data
 def insurance_data(cursor, year,quarter):
     with st.container(height = 750):
         #Total insurance data
@@ -421,7 +462,7 @@ def insurance_data(cursor, year,quarter):
             
             for i,row in state_df.iterrows():
                 show_state_data(i+1,
-                                row['pincode'],
+                                int(row['pincode']),
                                 e.simplify_number(row['total_policies'],True,True)
                                 )
 
@@ -601,6 +642,7 @@ def ins(cursor):
                 premium amount has been increasing
                 """)
 
+#Transaction analysis
 def trans(cursor):
     st.header(':violet[TRANSACTION ANALYSIS]	:dollar:')
     st.divider()
@@ -796,43 +838,48 @@ def trans(cursor):
                 amount has been increasing
                 """)
 
+#User analysis
 def user(cursor):
     st.header(':violet[USER ANALYSIS]	:dollar:')
     st.divider()
-    
+        
     query = 'select state,year,quarter,district from map_user'
     state_df = e.extract_convert_to_dataframe(query,cursor)
     
     filters = []
     labels = []
-    col1,col2,col3 = st.columns([1,1,1])
+    
+    st.header('Filters:')
+    col1,col2,col3 = st.columns(3)
     with col1:
-        with st.expander('Filters',expanded=True):
-            till_date = st.checkbox('Remove Filters')
-            if not till_date:
-                state = make_selectbox(state_df,'Select state:','state')
-                year = st.radio('Select year:',options=[None] + [row for row in state_df['year'].unique()],horizontal= True,index = 0)
-                quarter = st.radio('Select quarter:',options=[None] + [row for row in state_df['quarter'].unique()],horizontal= True,index = 0)
-                if state:
-                    query = f"select district from map_user where state = '{state}'"
-                    df = e.extract_convert_to_dataframe(query,cursor)
-                    district = make_selectbox(df,'Select district:','district')
-                
-                
-                if state:
-                    filters.append(f"state = '{state}'")
-                    labels.append(f' in :blue[{state}]')
-                    if district:
-                        filters.append(f"district = '{district}'")
-                        labels.append(f' for :blue[{district}]')
-                if quarter:
-                    filters.append(f"quarter = {quarter}")
-                    labels.append(f' for :red[Q{quarter} ]')
-                if year:
-                    filters.append(f"year = {year}")
-                    labels.append(f' :violet[{year}]')
+        with st.container(height = 100):
+            state = st.radio('Select state:', options = [None] + [row for row in state_df['state'].unique()],horizontal= True,index = 0)
+        year = st.radio('Select year:',options=[None] + [row for row in state_df['year'].unique()],horizontal= True,index = 0)
+        quarter = st.radio('Select quarter:',options=[None] + [row for row in state_df['quarter'].unique()],horizontal= True,index = 0)
+        if state:
+            query = f"select left(district, length(district)-9) as District from map_user where state = '{state}'"
+            df = e.extract_convert_to_dataframe(query,cursor)
+            with st.container(height = 100):
+                district = st.radio('Select district:', options = [None] + [row for row in df['District'].unique()],horizontal= True,index = 0)
+            district = f'{district} district'
+
+            st.write(district[:4])
+        if state:
+            filters.append(f"state = '{state}'")
+            labels.append(f' in :blue[{state}]')
+            if district[:4] != 'None':
+                st.write('Enter')
+                filters.append(f"district = '{district}'")
+                labels.append(f' for :blue[{district}]')
+        if quarter:
+            filters.append(f"quarter = {quarter}")
+            labels.append(f' for :red[Q{quarter} ]')
+        if year:
+            filters.append(f"year = {year}")
+            labels.append(f' :violet[{year}]')
 
     label = ' '.join(labels)
+        
     where_clause = " AND ".join(filters)
         
     if where_clause:
@@ -842,23 +889,29 @@ def user(cursor):
     data_df = e.extract_convert_to_dataframe(query,cursor)
     
     with col2:
-        st.header(f':green[:orange[Registered users] and :orange[App_Opens] {label}]')
+        st.header(f':green[:orange[Registered users] and :orange[App Opens] {label}]')
         
         users = e.simplify_number(int(data_df['users']))
         app_opens = e.simplify_number(int(data_df['app']))
             
-        st.metric('Registered users(2018 - 2023)', users)
-        st.metric('App_Opens (2018 - 2023)', app_opens)
+        st.metric('Registered users', users)
+        st.metric('App Opens ', app_opens)
+    
+    with col3:
+        query = f"select sum(app_opens) as app, sum(registered_user) as users from map_user"
+        data_df = e.extract_convert_to_dataframe(query,cursor)
+        
+        st.header(f':green[:orange[Registered users] and :orange[App Opens] (2018-2023)]')
+        
+        users = e.simplify_number(int(data_df['users']))
+        app_opens = e.simplify_number(int(data_df['app']))
+            
+        st.metric('Registered users', users)
+        st.metric('App Opens ', app_opens)
 
-
-    # with col3:
-    #     fig = px.pie(data_df,values = 'users',names = 'year')
-    #     st.plotly_chart(fig,theme = None,use_container_width=True)
     st.divider()
     
-    st.header(':green[State and District wise analysis of percentage of :blue[Registered Users] and percentage of :red[App Openings]]')
-
-    
+    st.header(':green[:orange[State] and :orange[District] wise analysis of percentage of :blue[Registered Users] and percentage of :red[App Openings]]')    
     col1,col2 = st.columns(2)
     with col1:
         state = st.selectbox('Select state:', [row for row in state_df['state'].unique()])
@@ -879,7 +932,7 @@ def user(cursor):
             query = f"select distinct upper(left(district, length(district)-9)) as District from map_user where state = '{state}'"
             data_df = e.extract_convert_to_dataframe(query,cursor)
 
-            district = make_selectbox(data_df,'Select District:','District')
+            district = st.selectbox('Select district:', [row for row in data_df['District'].unique()],index = 0)
 
             if district:
                 query = f"select district,year as Year,sum(registered_user) as Users,sum(app_opens) as App_opens from map_user where district = '{district} district' group by state,year;"
@@ -892,18 +945,73 @@ def user(cursor):
                         barmode='group', title = f'Users and App opens for {district.lower()} district')
 
                 st.plotly_chart(fig,theme=None,use_container_width=True)
-                
+    
+    st.divider()
+
     st.header(':green[Brand share analysis per :blue[STATE] and :red[YEAR]]')
+    
+    query = f"select brand, state, year from agg_user"
+    df = e.extract_convert_to_dataframe(query,cursor)
     
     col1,col2 = st.columns(2)
     with col1:
-        st.header(':blue[By state]')
-        state = st.selectbox('Select state:', [row for row in state_df['state'].unique()],key='state_brand')
+        state = st.selectbox('Select state:', [row for row in df['state'].unique()],key='state_brand')
 
-        query = f"select brand, sum(registered_users_per_brand) users,sum(percentage) percent from agg_user where state = 'Odisha' group by brand;"
+        query = f"select brand, sum(registered_users_per_brand) users,sum(percentage) percent from agg_user where state = '{state}' group by brand;"
         brand_df = e.extract_convert_to_dataframe(query,cursor)
-        st.write(brand_df,brand_df['percent'].sum())
-        fig = px.pie()
+        
+        brand_analysis_pie(brand_df,'percent','brand',f'Brand share for {state}')
+        
+    with col2:
+        year = st.selectbox('Select year:', [row for row in df['year'].unique()],key='year_brand')
+
+        query = f"select brand, sum(registered_users_per_brand) users,sum(percentage) percent from agg_user where state = '{state}' and year = {year} group by brand;"
+        brand_df = e.extract_convert_to_dataframe(query,cursor)
+        
+        brand_analysis_pie(brand_df,'percent','brand',f'Brand share for {state} in {year}')
+
+    st.divider()
+    
+    st.header(':green[Registered users analysis for :orange[Brand] per :blue[STATE] and per :red[YEAR] ]')
+
+    brand = st.selectbox('Select brand:', [row for row in sorted(df['brand'].unique())],key='brand')
+
+    col1,col2 = st.columns(2)
+    
+    with col1:
+        state = st.selectbox('Select state:', [row for row in df['state'].unique()],key='state')
+        
+    with col2:
+        year = st.selectbox('Select year:', [row for row in df['year'].unique()],key='year')
+
+    col1,col2,col3 = st.columns(3)
+    with col1:
+        query = f"select state,brand, year, sum(registered_users_per_brand) users from agg_user where brand = '{brand}' group by brand,state ,year;"
+        brand_df = e.extract_convert_to_dataframe(query,cursor)
+            
+        plot_bar(brand_df,'state','users',f'{brand} users','year')
+    
+    with col2:
+        query = f"select state,brand, year, quarter,sum(registered_users_per_brand) users from agg_user where brand = '{brand}' and  state = '{state}' group by brand,state ,year,quarter;"
+        brand_df = e.extract_convert_to_dataframe(query,cursor)
+            
+        plot_bar(brand_df,'quarter','users',f'{brand} users in {state}','year')
+        
+    with col3:
+        query = f"select state,brand, year,quarter, sum(registered_users_per_brand) users from agg_user where brand = '{brand}' and year = {year} group by brand,state ,year,quarter;"
+        brand_df = e.extract_convert_to_dataframe(query,cursor)
+            
+        plot_bar(brand_df,'state','users',f'{brand} users in {year}','quarter')
+    
+#Brand analysis pie chart
+def brand_analysis_pie(df,values,names,title):
+    fig = px.pie(df,values = values,names = names,
+                    title = title,hole = 0.4)
+        
+    fig.update_traces(textposition='inside', textinfo='percent+label')
+
+    st.plotly_chart(fig,use_container_width=True)
+    
 #Common selectbox
 def make_selectbox(df,label,option_col):
     state = st.selectbox(label,options=[val for val in df[option_col].unique()],
