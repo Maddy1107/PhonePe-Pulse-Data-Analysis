@@ -43,3 +43,11 @@ Filter and process the collected data depending on the given requirements by usi
 ### c) Visualization
 
 Finally, create a Dashboard by using Streamlit and applying selection and dropdown options on the Dashboard and show the output are Geo visualization, bar chart, and Dataframe Table
+
+<div>
+	<img src="https://github.com/Maddy1107/PhonePe-Pulse-Data-Analysis/blob/main/Viz%20images/1.png"/>
+  	<img src="https://github.com/Maddy1107/PhonePe-Pulse-Data-Analysis/blob/main/Viz%20images/2.png"/>
+	<img src="https://github.com/Maddy1107/PhonePe-Pulse-Data-Analysis/blob/main/Viz%20images/3.png"/>
+	<img src="https://github.com/Maddy1107/PhonePe-Pulse-Data-Analysis/blob/main/Viz%20images/4.png"/>
+</div>
+
